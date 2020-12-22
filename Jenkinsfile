@@ -1,57 +1,36 @@
-@Library('luffy-devops') _
-
 pipeline {
-    agent { label 'jnlp-slave'}
-    options {
-		timeout(time: 20, unit: 'MINUTES')
-		gitLabConnection('gitlab')
-	}
-    environment {
-        IMAGE_REPO = "192.168.136.25:5000/demo/myblog"
-        IMAGE_CREDENTIAL = "credential-registry"
-        DINGTALK_CREDS = credentials('dingTalk')
-    }
-    stages {
-        stage('checkout') {
-            steps {
-                container('tools') {
-                    checkout scm
-                }
-            }
+   agent { label '192.168.136.27'}
+
+   stages {
+      stage('printenv') {
+         steps {
+            echo 'Hello World'
+            sh 'printenv'
+         }
+      }
+      stage('check') {
+         steps {
+            checkout([$class: 'GitSCM', branches: [[name: '*/master']], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[credentialsId: 'root-new', url: 'http://gitlab.dblace.com/dev/myblog.git']]])
+         }
+      }
+      stage('build-image') {
+         steps {
+            retry(2) { sh 'docker build . -t myblog:latest'}
+         }
+      }
+      stage('send-msg') {
+         steps {
+            sh """
+            curl 'https://oapi.dingtalk.com/robot/send?access_token=4bf6701f9e1cd97b2366600e90b7ebf55928e681c9280e82f9afb8395e44eb81' \
+   -H 'Content-Type: application/json' \
+   -d '{"msgtype": "text", 
+        "text": {
+             "content": "我就是我, 是不一样的烟火"
         }
-        stage('docker-image') {
-            steps {
-                container('tools') {
-                    script{
-                        devops.docker(
-                            "${IMAGE_REPO}",
-                            "${GIT_COMMIT}",
-                            IMAGE_CREDENTIAL                          
-                        ).build().push()
-                    }
-                }
-            }
-        }
-        stage('deploy') {
-            steps {
-                container('tools') {
-                    script{
-                    	devops.deploy("deploy",true,"deploy/deployment.yaml").start()
-                    }
-                }
-            }
-        }
-    }
-    post {
-        success { 
-            script{
-                devops.notificationSuccess("myblog","dingTalk")
-            }
-        }
-        failure {
-            script{
-                devops.notificationFailure("myblog","dingTalk")
-            }
-        }
-    }
+      }'
+      """
+         }
+      }
+   }
 }
+
