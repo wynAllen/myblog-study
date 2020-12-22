@@ -2,7 +2,7 @@
 # Version 1.0
 
 # Base images 基础镜像
-FROM localhost:5000/centos:centos7.5.1804
+FROM 192.168.136.25:5000/centos:centos7.5.1804
 
 #MAINTAINER 维护者信息
 LABEL maintainer="inspur_lyx@hotmail.com"
