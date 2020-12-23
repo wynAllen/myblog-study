@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: myblog
-  namespace: luffy
+  namespace: {{NAMESPACE}}
 spec:
   replicas: 1   #指定Pod副本数
   selector:             #指定Pod的选择器
@@ -55,11 +55,11 @@ spec:
           initialDelaySeconds: 10  # 容器启动后第一次执行探测是需要等待多少秒
           periodSeconds: 15     # 执行探测的频率
           timeoutSeconds: 2             # 探测超时时间
-        readinessProbe:
-          httpGet:
+        readinessProbe: 
+          httpGet: 
             path: /blog/index/
             port: 8002
             scheme: HTTP
-          initialDelaySeconds: 10
+          initialDelaySeconds: 10 
           timeoutSeconds: 2
           periodSeconds: 15
