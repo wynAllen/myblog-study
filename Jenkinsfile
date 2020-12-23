@@ -1,30 +1,44 @@
 pipeline {
-    agent { label '192.168.136.27'}
+    agent any
 
     environment {
         IMAGE_REPO = "192.168.136.25:5000/myblog"
+        DINGTALK_CREDS = credentials('dingTalk')
+        TAB_STR = "\n                    \n&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
     }
 
     stages {
         stage('printenv') {
             steps {
-              echo 'Hello World'
-              sh 'printenv'
+                script{
+                    sh "git log --oneline -n 1 > gitlog.file"
+                    env.GIT_LOG = readFile("gitlog.file").trim()
+                }
+                sh 'printenv'
             }
         }
-        stage('check') {
+        stage('checkout') {
             steps {
                 checkout scm
+                script{
+                    env.BUILD_TASKS = env.STAGE_NAME + "√..." + env.TAB_STR
+                }
             }
         }
         stage('build-image') {
             steps {
                 retry(2) { sh 'docker build . -t ${IMAGE_REPO}:${GIT_COMMIT}'}
+                script{
+                    env.BUILD_TASKS += env.STAGE_NAME + "√..." + env.TAB_STR
+                }
             }
         }
         stage('push-image') {
             steps {
                 retry(2) { sh 'docker push ${IMAGE_REPO}:${GIT_COMMIT}'}
+                script{
+                    env.BUILD_TASKS += env.STAGE_NAME + "√..." + env.TAB_STR
+                }
             }
         }
         stage('deploy') {
@@ -33,6 +47,9 @@ pipeline {
                 timeout(time: 1, unit: 'MINUTES') {
                     sh "kubectl apply -f deploy/"
                 }
+                script{
+                    env.BUILD_TASKS += env.STAGE_NAME + "√..." + env.TAB_STR
+                }
             }
         }
     }
@@ -40,25 +57,29 @@ pipeline {
         success { 
             echo 'Congratulations!'
             sh """
-                curl 'https://oapi.dingtalk.com/robot/send?access_token=4bf6701f9e1cd97b2366600e90b7ebf55928e681c9280e82f9afb8395e44eb81' \
+                curl 'https://oapi.dingtalk.com/robot/send?access_token=${DINGTALK_CREDS_PSW}' \
                     -H 'Content-Type: application/json' \
-                    -d '{"msgtype": "text", 
-                            "text": {
-                                "content": "😄👍构建成功👍😄\n 关键字：myblog\n 项目名称: ${JOB_BASE_NAME}\n Commit Id: ${GIT_COMMIT}\n 构建地址：${RUN_DISPLAY_URL}"
+                    -d '{
+                        "msgtype": "markdown",
+                        "markdown": {
+                            "title":"myblog",
+                            "text": "😄👍 构建成功 👍😄  \n**项目名称**：luffy  \n**Git log**: ${GIT_LOG}   \n**构建分支**: ${GIT_BRANCH}   \n**构建地址**：${RUN_DISPLAY_URL}  \n**构建任务**：${BUILD_TASKS}"
                         }
-                }'
-            """
+                    }'
+            """ 
         }
         failure {
             echo 'Oh no!'
             sh """
-                curl 'https://oapi.dingtalk.com/robot/send?access_token=4bf6701f9e1cd97b2366600e90b7ebf55928e681c9280e82f9afb8395e44eb81' \
+                curl 'https://oapi.dingtalk.com/robot/send?access_token=${DINGTALK_CREDS_PSW}' \
                     -H 'Content-Type: application/json' \
-                    -d '{"msgtype": "text", 
-                            "text": {
-                                "content": "😖❌构建失败❌😖\n 关键字：luffy\n 项目名称: ${JOB_BASE_NAME}\n Commit Id: ${GIT_COMMIT}\n 构建地址：${RUN_DISPLAY_URL}" 
+                    -d '{
+                        "msgtype": "markdown",
+                        "markdown": {
+                            "title":"myblog",
+                            "text": "😖❌ 构建失败 ❌😖  \n**项目名称**：luffy  \n**Git log**: ${GIT_LOG}   \n**构建分支**: ${GIT_BRANCH}  \n**构建地址**：${RUN_DISPLAY_URL}  \n**构建任务**：${BUILD_TASKS}"
                         }
-                }'
+                    }'
             """
         }
         always { 
