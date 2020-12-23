@@ -6,14 +6,3 @@ kind: ConfigMap
 metadata:
   name: myblog
   namespace: {{NAMESPACE}}
-
-$ cat secret.yaml
-apiVersion: v1
-data:
-  MYSQL_PASSWD: MTIzNDU2
-  MYSQL_USER: cm9vdA==
-kind: Secret
-metadata:
-  name: myblog
-  namespace: {{NAMESPACE}}
-type: Opaque
