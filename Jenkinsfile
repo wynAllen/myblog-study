@@ -1,5 +1,5 @@
 pipeline {
-    agent { label '192.168.136.27'}
+    agent { label 'jnlp-slave'}
 
     environment {
         IMAGE_REPO = "192.168.136.25:5000/myblog"
