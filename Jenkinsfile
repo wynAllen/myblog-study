@@ -9,7 +9,7 @@ pipeline {
 	}
 
     environment {
-        IMAGE_REPO = "192.168.136.25:5000/demo/myblog"
+        IMAGE_REPO = "192.168.136.25:5000/myblog"
         DINGTALK_CREDS = credentials('dingTalk')
         TAB_STR = "\n                    \n&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
     }
@@ -26,7 +26,9 @@ pipeline {
         }
         stage('checkout') {
             steps {
-                checkout scm
+                container('tools') {
+                    checkout scm
+                }
                 updateGitlabCommitStatus(name: env.STAGE_NAME, state: 'success')
                 script{
                     env.BUILD_TASKS = env.STAGE_NAME + "√..." + env.TAB_STR
@@ -35,7 +37,9 @@ pipeline {
         }
         stage('build-image') {
             steps {
-                retry(2) { sh 'docker build . -t ${IMAGE_REPO}:${GIT_COMMIT}'}
+                container('tools') {
+                    retry(2) { sh 'docker build . -t ${IMAGE_REPO}:${GIT_COMMIT}'}
+                }
                 updateGitlabCommitStatus(name: env.STAGE_NAME, state: 'success')
                 script{
                     env.BUILD_TASKS += env.STAGE_NAME + "√..." + env.TAB_STR
@@ -44,7 +48,9 @@ pipeline {
         }
         stage('push-image') {
             steps {
-                retry(2) { sh 'docker push ${IMAGE_REPO}:${GIT_COMMIT}'}
+                container('tools') {
+                    retry(2) { sh 'docker push ${IMAGE_REPO}:${GIT_COMMIT}'}
+                }
                 updateGitlabCommitStatus(name: env.STAGE_NAME, state: 'success')
                 script{
                     env.BUILD_TASKS += env.STAGE_NAME + "√..." + env.TAB_STR
@@ -53,9 +59,11 @@ pipeline {
         }
         stage('deploy') {
             steps {
-                sh "sed -i 's#{{IMAGE_URL}}#${IMAGE_REPO}:${GIT_COMMIT}#g' deploy/*"
-                timeout(time: 1, unit: 'MINUTES') {
-                    sh "kubectl apply -f deploy/"
+                container('tools') {
+                    sh "sed -i 's#{{IMAGE_URL}}#${IMAGE_REPO}:${GIT_COMMIT}#g' deploy/*"
+                    timeout(time: 1, unit: 'MINUTES') {
+                        sh "kubectl apply -f deploy/"
+                    }
                 }
                 updateGitlabCommitStatus(name: env.STAGE_NAME, state: 'success')
                 script{
