@@ -1,37 +1,22 @@
+@Library('luffy-devops') _
+
 pipeline {
     agent { label 'jnlp-slave'}
-    
     options {
-		buildDiscarder(logRotator(numToKeepStr: '10'))
-		disableConcurrentBuilds()
 		timeout(time: 20, unit: 'MINUTES')
 		gitLabConnection('gitlab')
 	}
-
     environment {
         IMAGE_REPO = "192.168.136.25:5000/demo/myblog"
+        IMAGE_CREDENTIAL = "credential-registry"
         DINGTALK_CREDS = credentials('dingTalk')
-        TAB_STR = "\n                    \n&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
+        PROJECT = "myblog"
     }
-
     stages {
-        stage('git-log') {
-            steps {
-                script{
-                    sh "git log --oneline -n 1 > gitlog.file"
-                    env.GIT_LOG = readFile("gitlog.file").trim()
-                }
-                sh 'printenv'
-            }
-        }        
         stage('checkout') {
             steps {
                 container('tools') {
                     checkout scm
-                }
-                updateGitlabCommitStatus(name: env.STAGE_NAME, state: 'success')
-                script{
-                    env.BUILD_TASKS = env.STAGE_NAME + "√..." + env.TAB_STR
                 }
             }
         }
@@ -46,111 +31,59 @@ pipeline {
                 stage('Code Scan') {
                     steps {
                         container('tools') {
-                            withSonarQubeEnv('sonarqube') {
-                                sh 'sonar-scanner -X'
-                                sleep 3
-                            }
                             script {
-                                timeout(1) {
-                                    def qg = waitForQualityGate('sonarqube')
-                                    if (qg.status != 'OK') {
-                                        error "未通过Sonarqube的代码质量阈检查，请及时修改！failure: ${qg.status}"
-                                    }
-                                }
+                               devops.scan().start()
                             }
                         }
                     }
                 }
             }
         }
-        stage('build-image') {
+        stage('docker-image') {
             steps {
                 container('tools') {
-                    retry(2) { sh 'docker build . -t ${IMAGE_REPO}:${GIT_COMMIT}'}
-                }
-                updateGitlabCommitStatus(name: env.STAGE_NAME, state: 'success')
-                script{
-                    env.BUILD_TASKS += env.STAGE_NAME + "√..." + env.TAB_STR
-                }
-            }
-        }
-        stage('push-image') {
-            steps {
-                container('tools') {
-                    retry(2) { sh 'docker push ${IMAGE_REPO}:${GIT_COMMIT}'}
-                }
-                updateGitlabCommitStatus(name: env.STAGE_NAME, state: 'success')
-                script{
-                    env.BUILD_TASKS += env.STAGE_NAME + "√..." + env.TAB_STR
+                    script{
+                        devops.docker(
+                            "${IMAGE_REPO}",
+                            "${GIT_COMMIT}",
+                            IMAGE_CREDENTIAL                          
+                        ).build().push()
+                    }
                 }
             }
         }
         stage('deploy') {
             steps {
                 container('tools') {
-                    sh "sed -i 's#{{IMAGE_URL}}#${IMAGE_REPO}:${GIT_COMMIT}#g' deploy/*"
-                    timeout(time: 1, unit: 'MINUTES') {
-                        sh "kubectl apply -f deploy/;sleep 20;"
+                    script{
+                    	devops.deploy("deploy",true,"deploy/deployment.yaml").start()
                     }
-                }
-                updateGitlabCommitStatus(name: env.STAGE_NAME, state: 'success')
-                script{
-                    env.BUILD_TASKS += env.STAGE_NAME + "√..." + env.TAB_STR
                 }
             }
         }
-        stage('Accept Test') {
+        stage('integration test') {
+            when {
+                expression { BRANCH_NAME ==~ /v.*/ }
+            }
             steps {
-                    container('tools') {
-                        sh 'robot -i critical  -d artifacts/ robot.txt|| echo ok'
-                        echo "R ${currentBuild.result}"
-                        step([
-                            $class : 'RobotPublisher',
-                            outputPath: 'artifacts/',
-                            outputFileName : "output.xml",
-                            disableArchiveOutput : false,
-                            passThreshold : 40,
-                            unstableThreshold: 20.0,
-                            onlyCritical : true,
-                            otherFiles : "*.png"
-                        ])
-                        echo "R ${currentBuild.result}"
-                        archiveArtifacts artifacts: 'artifacts/*', fingerprint: true
+                container('tools') {
+                    script{
+                    	devops.robotTest(PROJECT)
                     }
+                }
             }
         }
     }
     post {
         success { 
-            echo 'Congratulations!'
-            sh """
-                curl 'https://oapi.dingtalk.com/robot/send?access_token=${DINGTALK_CREDS_PSW}' \
-                    -H 'Content-Type: application/json' \
-                    -d '{
-                        "msgtype": "markdown",
-                        "markdown": {
-                            "title":"myblog",
-                            "text": "😄👍 构建成功 👍😄  \n**项目名称**：luffy  \n**Git log**: ${GIT_LOG}   \n**构建分支**: ${BRANCH_NAME}   \n**构建地址**：${RUN_DISPLAY_URL}  \n**构建任务**：${BUILD_TASKS}"
-                        }
-                    }'
-            """ 
+            script{
+                devops.notificationSuccess(PROJECT,"dingTalk")
+            }
         }
         failure {
-            echo 'Oh no!'
-            sh """
-                curl 'https://oapi.dingtalk.com/robot/send?access_token=${DINGTALK_CREDS_PSW}' \
-                    -H 'Content-Type: application/json' \
-                    -d '{
-                        "msgtype": "markdown",
-                        "markdown": {
-                            "title":"myblog",
-                            "text": "😖❌ 构建失败 ❌😖  \n**项目名称**：luffy  \n**Git log**: ${GIT_LOG}   \n**构建分支**: ${BRANCH_NAME}  \n**构建地址**：${RUN_DISPLAY_URL}  \n**构建任务**：${BUILD_TASKS}"
-                        }
-                    }'
-            """
-        }
-        always { 
-            echo 'I will always say Hello again!'
+            script{
+                devops.notificationFailure(PROJECT,"dingTalk")
+            }
         }
     }
 }
