@@ -7,7 +7,7 @@ pipeline {
 		gitLabConnection('gitlab')
 	}
     environment {
-        IMAGE_REPO = "192.168.136.25:5000/demo/myblog"
+        IMAGE_REPO = "192.168.136.25:5000/demo/myblog:v1"
         IMAGE_CREDENTIAL = "credential-registry"
         DINGTALK_CREDS = credentials('dingTalk')
         PROJECT = "myblog"
