@@ -90,13 +90,33 @@ pipeline {
                 container('tools') {
                     sh "sed -i 's#{{IMAGE_URL}}#${IMAGE_REPO}:${GIT_COMMIT}#g' deploy/*"
                     timeout(time: 1, unit: 'MINUTES') {
-                        sh "kubectl apply -f deploy/"
+                        sh "kubectl apply -f deploy/;sleep 20;"
                     }
                 }
                 updateGitlabCommitStatus(name: env.STAGE_NAME, state: 'success')
                 script{
                     env.BUILD_TASKS += env.STAGE_NAME + "√..." + env.TAB_STR
                 }
+            }
+        }
+        stage('Accept Test') {
+            steps {
+                    container('tools') {
+                        sh 'robot -i critical  -d artifacts/ robot.txt|| echo ok'
+                        echo "R ${currentBuild.result}"
+                        step([
+                            $class : 'RobotPublisher',
+                            outputPath: 'artifacts/',
+                            outputFileName : "output.xml",
+                            disableArchiveOutput : false,
+                            passThreshold : 40,
+                            unstableThreshold: 20.0,
+                            onlyCritical : true,
+                            otherFiles : "*.png"
+                        ])
+                        echo "R ${currentBuild.result}"
+                        archiveArtifacts artifacts: 'artifacts/*', fingerprint: true
+                    }
             }
         }
     }
