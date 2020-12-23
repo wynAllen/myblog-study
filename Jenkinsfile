@@ -1,8 +1,15 @@
 pipeline {
     agent { label '192.168.136.27'}
+    
+    options {
+		buildDiscarder(logRotator(numToKeepStr: '10'))
+		disableConcurrentBuilds()
+		timeout(time: 20, unit: 'MINUTES')
+		gitLabConnection('gitlab')
+	}
 
     environment {
-        IMAGE_REPO = "192.168.136.25:5000/myblog"
+        IMAGE_REPO = "192.168.136.25:5000/demo/myblog"
         DINGTALK_CREDS = credentials('dingTalk')
         TAB_STR = "\n                    \n&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
     }
@@ -20,6 +27,7 @@ pipeline {
         stage('checkout') {
             steps {
                 checkout scm
+                updateGitlabCommitStatus(name: env.STAGE_NAME, state: 'success')
                 script{
                     env.BUILD_TASKS = env.STAGE_NAME + "√..." + env.TAB_STR
                 }
@@ -28,6 +36,7 @@ pipeline {
         stage('build-image') {
             steps {
                 retry(2) { sh 'docker build . -t ${IMAGE_REPO}:${GIT_COMMIT}'}
+                updateGitlabCommitStatus(name: env.STAGE_NAME, state: 'success')
                 script{
                     env.BUILD_TASKS += env.STAGE_NAME + "√..." + env.TAB_STR
                 }
@@ -36,6 +45,7 @@ pipeline {
         stage('push-image') {
             steps {
                 retry(2) { sh 'docker push ${IMAGE_REPO}:${GIT_COMMIT}'}
+                updateGitlabCommitStatus(name: env.STAGE_NAME, state: 'success')
                 script{
                     env.BUILD_TASKS += env.STAGE_NAME + "√..." + env.TAB_STR
                 }
@@ -47,6 +57,7 @@ pipeline {
                 timeout(time: 1, unit: 'MINUTES') {
                     sh "kubectl apply -f deploy/"
                 }
+                updateGitlabCommitStatus(name: env.STAGE_NAME, state: 'success')
                 script{
                     env.BUILD_TASKS += env.STAGE_NAME + "√..." + env.TAB_STR
                 }
@@ -63,7 +74,7 @@ pipeline {
                         "msgtype": "markdown",
                         "markdown": {
                             "title":"myblog",
-                            "text": "😄👍 构建成功 👍😄  \n**项目名称**：luffy  \n**Git log**: ${GIT_LOG}   \n**构建分支**: ${GIT_BRANCH}   \n**构建地址**：${RUN_DISPLAY_URL}  \n**构建任务**：${BUILD_TASKS}"
+                            "text": "😄👍 构建成功 👍😄  \n**项目名称**：luffy  \n**Git log**: ${GIT_LOG}   \n**构建分支**: ${BRANCH_NAME}   \n**构建地址**：${RUN_DISPLAY_URL}  \n**构建任务**：${BUILD_TASKS}"
                         }
                     }'
             """ 
@@ -77,7 +88,7 @@ pipeline {
                         "msgtype": "markdown",
                         "markdown": {
                             "title":"myblog",
-                            "text": "😖❌ 构建失败 ❌😖  \n**项目名称**：luffy  \n**Git log**: ${GIT_LOG}   \n**构建分支**: ${GIT_BRANCH}  \n**构建地址**：${RUN_DISPLAY_URL}  \n**构建任务**：${BUILD_TASKS}"
+                            "text": "😖❌ 构建失败 ❌😖  \n**项目名称**：luffy  \n**Git log**: ${GIT_LOG}   \n**构建分支**: ${BRANCH_NAME}  \n**构建地址**：${RUN_DISPLAY_URL}  \n**构建任务**：${BUILD_TASKS}"
                         }
                     }'
             """
