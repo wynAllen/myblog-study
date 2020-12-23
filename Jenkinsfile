@@ -1,5 +1,5 @@
 pipeline {
-    agent 192.168.136.27
+    agent { label '192.168.136.27'}
 
     environment {
         IMAGE_REPO = "192.168.136.25:5000/myblog"
