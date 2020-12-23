@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: myblog
-        image: {{IMAGE_REPO}}
+        image: {{IMAGE_URL}}
         imagePullPolicy: IfNotPresent
         env:
         - name: MYSQL_HOST
