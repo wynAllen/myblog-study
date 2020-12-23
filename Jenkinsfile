@@ -1,5 +1,5 @@
 pipeline {
-    agent { label '192.168.136.27'}
+    agent { label 'jnlp-slave'}
     
     options {
 		buildDiscarder(logRotator(numToKeepStr: '10'))
