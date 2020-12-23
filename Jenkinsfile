@@ -9,13 +9,13 @@ pipeline {
 	}
 
     environment {
-        IMAGE_REPO = "192.168.136.25:5000/myblog"
+        IMAGE_REPO = "192.168.136.25:5000/demo/myblog"
         DINGTALK_CREDS = credentials('dingTalk')
         TAB_STR = "\n                    \n&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
     }
 
     stages {
-        stage('printenv') {
+        stage('git-log') {
             steps {
                 script{
                     sh "git log --oneline -n 1 > gitlog.file"
@@ -23,7 +23,7 @@ pipeline {
                 }
                 sh 'printenv'
             }
-        }
+        }        
         stage('checkout') {
             steps {
                 container('tools') {
@@ -32,6 +32,34 @@ pipeline {
                 updateGitlabCommitStatus(name: env.STAGE_NAME, state: 'success')
                 script{
                     env.BUILD_TASKS = env.STAGE_NAME + "√..." + env.TAB_STR
+                }
+            }
+        }
+        stage('CI'){
+            failFast true
+            parallel {
+                stage('Unit Test') {
+                    steps {
+                        echo "Unit Test Stage Skip..."
+                    }
+                }
+                stage('Code Scan') {
+                    steps {
+                        container('tools') {
+                            withSonarQubeEnv('sonarqube') {
+                                sh 'sonar-scanner -X'
+                                sleep 3
+                            }
+                            script {
+                                timeout(1) {
+                                    def qg = waitForQualityGate('sonarqube')
+                                    if (qg.status != 'OK') {
+                                        error "未通过Sonarqube的代码质量阈检查，请及时修改！failure: ${qg.status}"
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -106,4 +134,3 @@ pipeline {
         }
     }
 }
-
