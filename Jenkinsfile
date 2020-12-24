@@ -24,9 +24,13 @@ pipeline {
             failFast true
             parallel {
                 stage('Unit Test') {
-                    steps {
-                        echo "Unit Test Stage Skip..."
+                     steps {
+                container('tools') {
+                    script{
+                    	devops.robotTest(PROJECT)
                     }
+                }
+            }
                 }
                 stage('Code Scan') {
                     steps {
